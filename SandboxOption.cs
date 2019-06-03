@@ -79,9 +79,7 @@ namespace Bazel {
         /// </summary>
         public List<string> args { get; private set; } = null;
 
-        /// <summary>
-        /// Default constructor
-        /// </summary>
+        /// <nodoc />
         public SandboxOptions() { }
 
         /// <summary>
