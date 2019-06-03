@@ -36,6 +36,9 @@ namespace Bazel
             SandboxOptions options = new SandboxOptions();
             options.ParseOptions(args, pathTable);
 
+            var sandbox = new SandboxedProcess(pathTable);
+            var result = sandbox.Run(options).GetAwaiter().GetResult();
+
             return 0;
         }
     }
