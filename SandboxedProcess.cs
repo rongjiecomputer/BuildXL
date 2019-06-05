@@ -17,6 +17,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Bazel;
 using BuildXL.Processes;
@@ -33,12 +34,16 @@ namespace Bazel
     {
         private readonly LoggingContext m_loggingContext;
         private readonly PathTable m_pathTable;
+        private StreamWriter m_stdoutF = null;
+        private StreamWriter m_stderrF = null;
 
         /// <nodoc/>
         public SandboxedProcess(PathTable pathTable)
         {
             m_loggingContext = new LoggingContext(nameof(SandboxedProcess));
             m_pathTable = pathTable;
+            m_stdoutF = null;
+            m_stderrF = null;
         }
 
         /// <nodoc />
@@ -47,25 +52,75 @@ namespace Bazel
             var pathToProcess = option.args[0];
             var arguments = String.Join(" ", option.args.Skip(1));
 
+            var fam = CreateManifest(AbsolutePath.Create(m_pathTable, pathToProcess), option.bind_mount_sources);
+
+            Action<string> stdoutCallback;
+            if (option.stdout_path != AbsolutePath.Invalid)
+            {
+                m_stdoutF = new StreamWriter(option.stdout_path.ToString(m_pathTable));
+                stdoutCallback = s => m_stdoutF.WriteLine(s);
+            }
+            else
+            {
+                stdoutCallback = s => Console.WriteLine(s);
+            }
+
+            Action<string> stderrCallback;
+            if (option.stderr_path != AbsolutePath.Invalid)
+            {
+                m_stderrF = new StreamWriter(option.stderr_path.ToString(m_pathTable));
+                stderrCallback = s => m_stderrF.WriteLine(s);
+            }
+            else
+            {
+                stderrCallback = s => Console.Error.WriteLine(s);
+            }
+
             var info = new SandboxedProcessInfo(
                 m_pathTable,
                 this,
                 pathToProcess,
-                CreateManifest(AbsolutePath.Create(m_pathTable, pathToProcess), option.bind_mount_sources),
+                fam,
                 disableConHostSharing: true,
                 containerConfiguration: ContainerConfiguration.DisabledIsolation,
                 loggingContext: m_loggingContext)
             {
                 Arguments = arguments,
                 WorkingDirectory = option.working_dir.ToString(m_pathTable),
-                PipSemiStableHash = 0,
+                // PipSemiStableHash = 0,
                 PipDescription = "BazelSandboxedProcess",
+
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardOutputObserver = stdoutCallback,
+
+                StandardErrorEncoding = Encoding.UTF8,
+                StandardErrorObserver = stderrCallback,
+
                 SandboxedKextConnection = OperatingSystemHelper.IsUnixOS ? new KextConnection() : null
             };
+
+            if (option.timeout_secs != SandboxOptions.kInfiniteTime)
+            {
+                info.Timeout = TimeSpan.FromSeconds(option.timeout_secs);
+            }
+
+            if (option.kill_delay_secs != SandboxOptions.kInfiniteTime)
+            {
+                info.NestedProcessTerminationTimeout = TimeSpan.FromSeconds(option.kill_delay_secs);
+            }
 
             var process = SandboxedProcessFactory.StartAsync(info, forceSandboxing: true).GetAwaiter().GetResult();
 
             return process.GetResultAsync();
+        }
+
+        /// <summary>
+        /// Run clean up after sandboxed process ends.
+        /// </summary>
+        public void Cleanup()
+        {
+            m_stdoutF?.Close();
+            m_stderrF?.Close();
         }
 
         /// <nodoc />
@@ -75,29 +130,52 @@ namespace Bazel
         }
 
         /// <nodoc />
-        private FileAccessManifest CreateManifest(AbsolutePath pathToProcess, IEnumerable<AbsolutePath> directoriesToBlock)
+        private FileAccessManifest CreateManifest(AbsolutePath pathToProcess, IEnumerable<AbsolutePath> directoriesToAllow)
         {
             var fileAccessManifest = new FileAccessManifest(m_pathTable)
             {
                 FailUnexpectedFileAccesses = true,
-                ReportFileAccesses = true,
+                ReportFileAccesses = false,
+                ReportUnexpectedFileAccesses = false,
                 MonitorChildProcesses = true,
             };
 
-            // We allow all file accesses at the root level, so by default everything is allowed
-            fileAccessManifest.AddScope(AbsolutePath.Invalid, FileAccessPolicy.MaskNothing, FileAccessPolicy.AllowAll);
+            // We block all file accesses at the root level, so by default everything is blocked
+            fileAccessManifest.AddScope(AbsolutePath.Invalid, FileAccessPolicy.MaskNothing, FileAccessPolicy.Deny);
 
             // We explicitly allow reading from the tool path
             fileAccessManifest.AddPath(pathToProcess, FileAccessPolicy.MaskAll, FileAccessPolicy.AllowRead);
 
-            /*// We block access on all provided directories
-            foreach (var directoryToBlock in directoriesToBlock)
+            // We allow some special folders and temp folder
+            fileAccessManifest.AddScope(
+                AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.Windows)),
+                FileAccessPolicy.MaskAll,
+                FileAccessPolicy.AllowAll);
+
+            fileAccessManifest.AddScope(
+                AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.InternetCache)),
+                FileAccessPolicy.MaskAll,
+                FileAccessPolicy.AllowAll);
+
+            fileAccessManifest.AddScope(
+                AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.History)),
+                FileAccessPolicy.MaskAll,
+                FileAccessPolicy.AllowAll);
+
+            fileAccessManifest.AddScope(
+                AbsolutePath.Create(m_pathTable, Environment.GetEnvironmentVariable("TEMP")),
+                FileAccessPolicy.MaskAll,
+                FileAccessPolicy.AllowAll);
+
+            // We allow access on all provided directories
+            // Note: if C:\A is allowed, its subtree is allowed too.
+            foreach (var directoryToAllow in directoriesToAllow)
             {
                 fileAccessManifest.AddScope(
-                    directoryToBlock,
+                    directoryToAllow,
                     FileAccessPolicy.MaskAll,
-                    FileAccessPolicy.Deny & FileAccessPolicy.ReportAccess);
-            }*/
+                    FileAccessPolicy.AllowAll);
+            }
 
             return fileAccessManifest;
         }

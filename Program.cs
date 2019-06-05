@@ -26,9 +26,7 @@ namespace Bazel
     /// </summary>
     public class Program
     {
-        /// <summary>
-        /// Main entry
-        /// </summary>
+        /// <nodoc />
         public static int Main(string[] args)
         {
             var pathTable = new PathTable();
@@ -39,7 +37,9 @@ namespace Bazel
             var sandbox = new SandboxedProcess(pathTable);
             var result = sandbox.Run(options).GetAwaiter().GetResult();
 
-            return 0;
+            sandbox.Cleanup();
+
+            return result.ExitCode;
         }
     }
 }
