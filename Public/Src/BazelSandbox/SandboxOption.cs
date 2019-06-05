@@ -50,31 +50,19 @@ namespace Bazel {
         /// </summary> 
         public AbsolutePath stderr_path { get; private set; } = AbsolutePath.Invalid;
         /// <summary>
-        /// Files or directories to make writable for the sandboxed process (-w)
+        /// Files or directories to make readonly for the sandboxed process (-r)
+        /// </summary>
+        public List<AbsolutePath> readonly_files { get; private set; } = new List<AbsolutePath>();
+        /// <summary>
+        /// Files or directories to make read/writable for the sandboxed process (-w)
         /// </summary>
         public List<AbsolutePath> writable_files { get; private set; } = new List<AbsolutePath>();
-        // Directories where to mount an empty tmpfs (-e)
-        // public List<string> tmpfs_dirs;
-        /// <summary>
-        /// Source of files or directories to explicitly bind mount in the sandbox (-M)
-        /// </summary>
-        public List<AbsolutePath> bind_mount_sources { get; private set; } = new List<AbsolutePath>();
-        /// <summary>
-        /// Target of files or directories to explicitly bind mount in the sandbox (-m)
-        /// </summary> 
-        public List<AbsolutePath> bind_mount_targets { get; private set; } = new List<AbsolutePath>();
         // Where to write stats, in protobuf format (-S)
         // public AbsolutePath stats_path { get; private set; } = AbsolutePath.Invalid;
-        // Set the hostname inside the sandbox to 'localhost' (-H)
-        // public bool fake_hostname;
-        // Create a new network namespace (-N)
-        // public bool create_netns;
-        // Pretend to be root inside the namespace (-R)
-        // public bool fake_root;
-        // Set the username inside the sandbox to 'nobody' (-U)
-        // public bool fake_username;
-        // Print debugging messages (-D)
-        // public bool debug;
+        /// <summary>
+        /// Print debugging messages (-D)
+        /// </summary>
+        public bool debug = false;
         /// <summary>
         /// Command to run (--)
         /// </summary>
@@ -164,24 +152,19 @@ namespace Bazel {
                                 this.writable_files.Add(path);
                                 break;
                             }
-                        case "M":
+                        case "r":
                             {
                                 var path = AbsolutePath.Invalid;
                                 if (!AbsolutePath.TryCreate(pathTable, args[++i], out path))
                                 {
                                     ExitWithError($"Cannot create absolute path from '{args[i]}'");
                                 }
-                                this.bind_mount_sources.Add(path);
+                                this.readonly_files.Add(path);
                                 break;
                             }
-                        case "m":
+                        case "D":
                             {
-                                var path = AbsolutePath.Invalid;
-                                if (!AbsolutePath.TryCreate(pathTable, args[++i], out path))
-                                {
-                                    ExitWithError($"Cannot create absolute path from '{args[i]}'");
-                                }
-                                this.bind_mount_targets.Add(path);
+                                this.debug = true;
                                 break;
                             }
                         default:
@@ -223,20 +206,14 @@ namespace Bazel {
                     "killing the child with SIGKILL\n" +
                     "  -l <file>  redirect stdout to a file\n" +
                     "  -L <file>  redirect stderr to a file\n" +
-                    "  -w <file>  make a file or directory writable for the sandboxed " +
+                    "  -w <file>  make a file or directory read/writable for the sandboxed " +
                     "process\n" +
-                    "  -e <dir>  mount an empty tmpfs on a directory\n" +
-                    "  -M/-m <source/target>  directory to mount inside the sandbox\n" +
-                    "    Multiple directories can be specified and each of them will be " +
-                    "mounted readonly.\n" +
+                    "  -r <file>  make a file or directory readonly for the sandboxed " +
+                    "process\n" +
                     "    The -M option specifies which directory to mount, the -m option " +
                     "specifies where to\n" +
-                    "  -S <file>  if set, write stats in protobuf format to a file\n" +
-                    "  -H  if set, make hostname in the sandbox equal to 'localhost'\n" +
-                    "  -N  if set, a new network namespace will be created\n" +
-                    "  -R  if set, make the uid/gid be root\n" +
-                    "  -U  if set, make the uid/gid be nobody\n" +
-                    "  -D  if set, debug info will be printed\n" +
+                    // "  -S <file>  if set, write stats in protobuf format to a file\n" +
+                    "  -D  print debug messages to stdout\n" +
                     "  @FILE  read newline-separated arguments from FILE\n" +
                     "  --  command to run inside sandbox, followed by arguments\n");
             Environment.Exit(1);

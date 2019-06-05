@@ -50,9 +50,10 @@ namespace Bazel
         public Task<SandboxedProcessResult> Run(SandboxOptions option)
         {
             var pathToProcess = option.args[0];
+            // TODO(rongjiecomputer) Implement real command line creation algorithm
             var arguments = String.Join(" ", option.args.Skip(1));
 
-            var fam = CreateManifest(AbsolutePath.Create(m_pathTable, pathToProcess), option.bind_mount_sources);
+            var fam = CreateManifest(AbsolutePath.Create(m_pathTable, pathToProcess), option);
 
             Action<string> stdoutCallback;
             if (option.stdout_path != AbsolutePath.Invalid)
@@ -130,7 +131,7 @@ namespace Bazel
         }
 
         /// <nodoc />
-        private FileAccessManifest CreateManifest(AbsolutePath pathToProcess, IEnumerable<AbsolutePath> directoriesToAllow)
+        private FileAccessManifest CreateManifest(AbsolutePath pathToProcess, SandboxOptions option)
         {
             var fileAccessManifest = new FileAccessManifest(m_pathTable)
             {
@@ -167,12 +168,20 @@ namespace Bazel
                 FileAccessPolicy.MaskAll,
                 FileAccessPolicy.AllowAll);
 
-            // We allow access on all provided directories
+            // We allow access on all provided files/directories
             // Note: if C:\A is allowed, its subtree is allowed too.
-            foreach (var directoryToAllow in directoriesToAllow)
+            foreach (var path in option.readonly_files)
             {
                 fileAccessManifest.AddScope(
-                    directoryToAllow,
+                    path,
+                    FileAccessPolicy.MaskAll,
+                    FileAccessPolicy.AllowRead);
+            }
+
+            foreach (var path in option.writable_files)
+            {
+                fileAccessManifest.AddScope(
+                    path,
                     FileAccessPolicy.MaskAll,
                     FileAccessPolicy.AllowAll);
             }
