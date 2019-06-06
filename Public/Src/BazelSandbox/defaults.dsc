@@ -34,5 +34,16 @@ namespace BazelSandbox {
             importFrom("BuildXL.Utilities").dll,
             importFrom("BuildXL.Utilities").Native.dll,
         ],
+        runtimeContent: [
+            ...addIfLazy(qualifier.targetRuntime === "win-x64", () => [
+                importFrom("BuildXL.Sandbox.Windows").Deployment.definition,
+                {
+                    // subfolder: a`DetoursCrossBitTests`,
+                    contents: [
+                        importFrom("BuildXL.Sandbox.Windows").Deployment.definition,
+                    ]
+                },
+            ]),
+        ],
     });
 }
