@@ -77,6 +77,8 @@ namespace Bazel
                 stderrCallback = s => Console.Error.WriteLine(s);
             }
 
+            var workingDir = option.working_dir != AbsolutePath.Invalid ? option.working_dir.ToString(m_pathTable) : Environment.CurrentDirectory;
+
             var info = new SandboxedProcessInfo(
                 m_pathTable,
                 this,
@@ -87,7 +89,7 @@ namespace Bazel
                 loggingContext: m_loggingContext)
             {
                 Arguments = arguments,
-                WorkingDirectory = option.working_dir.ToString(m_pathTable),
+                WorkingDirectory = workingDir,
                 // PipSemiStableHash = 0,
                 PipDescription = "BazelSandboxedProcess",
 

@@ -196,7 +196,7 @@ namespace Bazel {
         private void PrintUsage() {
             var processName = Process.GetCurrentProcess().ProcessName;
             Console.Write(
-                    $"\nUsage: {processName} -- command arg1 @args\n" +
+                    $"\nUsage: {processName} [option...] -- command [arg...]\n" +
                     "\nPossible arguments:\n" +
                     "  -W <working-dir>  working directory (uses current directory if " +
                     "not specified)\n" +
@@ -210,8 +210,6 @@ namespace Bazel {
                     "process\n" +
                     "  -r <file>  make a file or directory readonly for the sandboxed " +
                     "process\n" +
-                    "    The -M option specifies which directory to mount, the -m option " +
-                    "specifies where to\n" +
                     // "  -S <file>  if set, write stats in protobuf format to a file\n" +
                     "  -D  print debug messages to stdout\n" +
                     "  @FILE  read newline-separated arguments from FILE\n" +
