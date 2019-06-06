@@ -178,6 +178,11 @@ namespace Test.BuildXL.Executables.TestProcess
             /// Launches the debugger
             /// </summary>
             LaunchDebugger,
+
+            /// <summary>
+            /// Process that fails on first invocation and then succeeds on the second invocation
+            /// </summary>
+            SucceedOnRetry,
         }
 
         /// <summary>
@@ -369,6 +374,9 @@ namespace Test.BuildXL.Executables.TestProcess
                     case Type.MoveFile:
                         DoMoveFile();
                         return;
+                    case Type.SucceedOnRetry:
+                        DoSucceedOnRetry();
+                        return;
                 }
             }
             catch (Exception e)
@@ -404,9 +412,9 @@ namespace Test.BuildXL.Executables.TestProcess
         /// <summary>
         /// Creates a create directory operation (uses WinAPI)
         /// </summary>
-        public static Operation CreateDir(FileOrDirectoryArtifact path, bool doNotInfer = false)
+        public static Operation CreateDir(FileOrDirectoryArtifact path, bool doNotInfer = false, string additionalArgs = null)
         {
-            return new Operation(Type.CreateDir, path, doNotInfer: doNotInfer);
+            return new Operation(Type.CreateDir, path, doNotInfer: doNotInfer, additionalArgs: additionalArgs);
         }
 
         /// <summary>
@@ -617,6 +625,17 @@ namespace Test.BuildXL.Executables.TestProcess
         }
 
         /// <summary>
+        /// Process that fails on first invocation and succeeds on second invocation.
+        /// </summary>
+        /// <param name="untrackedStateFilePath">File used to track state. This path should be untracked when scheduling the pip</param>
+        /// <param name="firstFailExitCode">Exit code for first failed invocation</param>
+        /// <returns></returns>
+        public static Operation SucceedOnRetry(FileArtifact untrackedStateFilePath, int firstFailExitCode = -1)
+        {
+            return new Operation(Type.SucceedOnRetry, path: untrackedStateFilePath, content: firstFailExitCode.ToString());
+        }
+
+        /// <summary>
         /// Launches the debugger
         /// </summary>
         public static Operation LaunchDebugger()
@@ -629,6 +648,28 @@ namespace Test.BuildXL.Executables.TestProcess
         private void DoCreateDir()
         {
             string directoryPath = FileOrDirectoryToString(Path);
+
+            bool failIfExists = false;
+
+            if (!string.IsNullOrEmpty(AdditionalArgs))
+            {
+                string[] args = AdditionalArgs.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var arg in args)
+                {
+                    if (string.Equals(arg, "--failIfExists", StringComparison.OrdinalIgnoreCase))
+                    {
+                        failIfExists = true;
+                    }
+                }
+            }
+
+            if (FileUtilities.DirectoryExistsNoFollow(directoryPath) || FileUtilities.FileExistsNoFollow(directoryPath))
+            {
+                if (failIfExists)
+                {
+                    throw new InvalidOperationException($"Directory creation failed because '{directoryPath}' exists");
+                }
+            }
 
             if (OperatingSystemHelper.IsUnixOS)
             {
@@ -939,6 +980,22 @@ namespace Test.BuildXL.Executables.TestProcess
             int exitCode = int.TryParse(Content, out var result) ? result : -1;
             Console.Error.WriteLine($"{Type.Fail} requested: Exiting with exit code {exitCode}");
             Environment.Exit(exitCode);
+        }
+
+        private void DoSucceedOnRetry()
+        {
+            // Use this state file to differentiate between the first run and the second run. The file will contain the exit code for the second run
+            string stateFilePath = FileOrDirectoryToString(Path);
+            if (File.Exists(stateFilePath))
+            {
+                int thisRunExitCode = int.Parse(File.ReadAllText(stateFilePath));
+                Environment.Exit(thisRunExitCode);
+            }
+            else
+            {
+                File.WriteAllText(stateFilePath, "0");
+                Environment.Exit(int.Parse(Content));
+            }
         }
 
         /*** COMMAND LINE PARSING FUNCTION ***/
