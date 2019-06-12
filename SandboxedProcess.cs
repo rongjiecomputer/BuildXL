@@ -146,6 +146,8 @@ namespace Bazel
             // We block all file accesses at the root level, so by default everything is blocked
             fileAccessManifest.AddScope(AbsolutePath.Invalid, FileAccessPolicy.MaskNothing, FileAccessPolicy.Deny);
 
+            fileAccessManifest.AddScope(option.working_dir, FileAccessPolicy.MaskAll, FileAccessPolicy.Deny);
+
             // We explicitly allow reading from the tool path
             fileAccessManifest.AddPath(pathToProcess, FileAccessPolicy.MaskAll, FileAccessPolicy.AllowRead);
 
