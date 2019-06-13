@@ -158,6 +158,21 @@ namespace Bazel
                 FileAccessPolicy.AllowAll);
 
             fileAccessManifest.AddScope(
+                AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.ProgramFiles)),
+                FileAccessPolicy.MaskAll,
+                FileAccessPolicy.AllowAll);
+
+            fileAccessManifest.AddScope(
+                AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)),
+                FileAccessPolicy.MaskAll,
+                FileAccessPolicy.AllowAll);
+
+            fileAccessManifest.AddScope(
+                AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.CommonApplicationData)),
+                FileAccessPolicy.MaskAll,
+                FileAccessPolicy.AllowAll);
+
+            fileAccessManifest.AddScope(
                 AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.InternetCache)),
                 FileAccessPolicy.MaskAll,
                 FileAccessPolicy.AllowAll);
