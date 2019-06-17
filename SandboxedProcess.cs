@@ -50,8 +50,6 @@ namespace Bazel
         public Task<SandboxedProcessResult> Run(SandboxOptions option)
         {
             var pathToProcess = option.args[0];
-            // TODO(rongjiecomputer) Implement real command line creation algorithm
-            var arguments = String.Join(" ", option.args.Skip(1));
 
             var fam = CreateManifest(AbsolutePath.Create(m_pathTable, pathToProcess), option);
 
@@ -88,7 +86,7 @@ namespace Bazel
                 containerConfiguration: ContainerConfiguration.DisabledIsolation,
                 loggingContext: m_loggingContext)
             {
-                Arguments = arguments,
+                Arguments = EscapeArgvRest(option.args.Skip(1)),
                 WorkingDirectory = workingDir,
                 // PipSemiStableHash = 0,
                 PipDescription = "BazelSandboxedProcess",
@@ -115,6 +113,84 @@ namespace Bazel
             var process = SandboxedProcessFactory.StartAsync(info, forceSandboxing: true).GetAwaiter().GetResult();
 
             return process.GetResultAsync();
+        }
+
+        /// <nodoc />
+        public static string EscapeArgvRest(IEnumerable<string> args)
+        {
+            StringBuilder result = new StringBuilder();
+            bool first = true;
+            foreach (var arg in args)
+            {
+                if (first) {
+                    first = false;
+                }
+                else
+                {
+                    result.Append(' ');
+                }
+                WindowsEscapeArg(arg, result);
+            }
+            return result.ToString();
+        }
+
+        /// <summary>
+        /// Append one escaped command line argument to result.
+        /// 
+        /// https://blogs.msdn.microsoft.com/twistylittlepassagesallalike/2011/04/23/everyone-quotes-command-line-arguments-the-wrong-way/
+        /// </summary>
+        public static void WindowsEscapeArg(string s, StringBuilder result)
+        {
+            if (s.Length == 0)
+            {
+                result.Append("\"\"");
+                return;
+            }
+
+            bool needsEscape = false;
+            foreach (var c in s)
+            {
+                if (c == ' '|| c == '\t' || c == '\n' || c == '\v' || c == '"')
+                {
+                    needsEscape = true;
+                    break;
+                }
+            }
+            if (!needsEscape)
+            {
+                result.Append(s);
+                return;
+            }
+
+            result.Append('"');
+
+            for (int i = 0; i < s.Length; i++)
+            {
+                int numberBackslashes = 0;
+
+                while (i < s.Length && s[i] == '\\')
+                {
+                    i++;
+                    numberBackslashes++;
+                }
+
+                if (i == s.Length)
+                {
+                    result.Append('\\', numberBackslashes * 2);
+                    break;
+                }
+                else if (s[i] == '"')
+                {
+                    result.Append('\\', numberBackslashes * 2 + 1);
+                    result.Append('"');
+                }
+                else
+                {
+                    result.Append('\\', numberBackslashes);
+                    result.Append(s[i]);
+                }
+            }
+            result.Append('"');
         }
 
         /// <summary>
