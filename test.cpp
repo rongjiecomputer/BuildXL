@@ -1,13 +1,8 @@
-// C++17 needed
-
 #ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
 #include <cstdio>
-#include <filesystem>
-
-namespace fs = std::experimental::filesystem;
 
 void testForRead(const char* filename) {
   char buffer[100];
@@ -25,10 +20,6 @@ int main(int argc, char** argv) {
   for (int i = 0; i < argc; i++) {
     printf("argv: (%s)\n", argv[i]);
   }
-
-  printf("cwd: %ls\n", fs::current_path().c_str());
-
-  char buffer[100] = {0};
 
   testForRead("a.txt");
   testForRead("b.txt");

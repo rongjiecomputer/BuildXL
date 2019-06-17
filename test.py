@@ -33,7 +33,7 @@ class BazelSandboxTest(absltest.TestCase):
     exitcode, stdout, stderr = RunCommandInSandbox(
         [r'C:\Windows\System32\cmd.exe', '/c', 'echo Hello World'])
     self.assertEqual(exitcode, 0)
-    self.assertStartsWith(stdout, 'Hello World')
+    self.assertEqual(stdout, 'Hello World\n')
 
   def test_console_redirect(self):
     stdoutF = self.create_tempfile('stdout.txt')
@@ -44,7 +44,16 @@ class BazelSandboxTest(absltest.TestCase):
     self.assertEqual(exitcode, 0)
     self.assertEqual(stdout, '')
     with open(stdoutF.full_path, 'r') as f:
-      self.assertStartsWith(f.readline(), 'Hello World')
+      self.assertEqual(f.readline(), 'Hello World\n')
+
+  def test_working_dir(self):
+    dir = self.create_tempdir()
+
+    exitcode, stdout, stderr = RunCommandInSandbox(
+      [r'C:\Windows\System32\cmd.exe', '/c', 'echo %CD%'],
+      ['-W', dir.full_path])
+    self.assertEqual(exitcode, 0)
+    self.assertEqual(stdout, dir.full_path + '\n')
 
   def _setup(self):
     self.dir = self.create_tempdir()
@@ -52,7 +61,7 @@ class BazelSandboxTest(absltest.TestCase):
     self.btxt = self.dir.create_file('b.txt', 'Dr. Jekyll and Mr. Hyde')
     self.ctxt = self.dir.create_file('c/c.txt')
 
-  def test_working_dir(self):
+  def test_file_access(self):
     self._setup()
 
     # File accesses in working dir are all blocked by default, but program can
@@ -100,6 +109,9 @@ class BazelSandboxTest(absltest.TestCase):
       'b.txt: can open for write',
     ])
 
+    # TODO(rongjiecomputer): Add test for conflicting permissions
+    # being applied to parent paths
+
   def test_env(self):
     env = os.environ.copy()
     env["NAME"] = "Jarvis" # test adding new env var
@@ -114,6 +126,32 @@ class BazelSandboxTest(absltest.TestCase):
       'NAME=Jarvis \n' +
       'PATH=C:\\Windows;C:\\Windows\\System32 \n' +
       'APPDATA=%APPDATA%\n')
+
+  def args_test_helper(self, args):
+    exitcode, stdout, stderr = RunCommandInSandbox(
+      [os.path.join(ROOT_DIR, 'test.exe')] + args)
+    if exitcode != 0:
+      print("stdout:", stdout)
+      print("stderr:", stderr)
+    self.assertEqual(exitcode, 0)
+
+    args = [os.path.join(ROOT_DIR, 'test.exe')] + args
+    expected_output = "".join(["argv: ({})\n".format(arg) for arg in args])
+    self.assertStartsWith(stdout, expected_output)
+
+  def test_args(self):
+    combinations = [
+      [],
+      ['a', 'b'],
+      ['a b', 'a\tb', 'a\vb', 'a\nb', 'a"b'],
+      ['a', '', 'b'], # empty arg should be preserved
+      ['^', 'a^', '^^'], # caret should have no effect with CreateProcess, unlike cmd.exe
+      ['\\', '\\\\', '\\\\\\'],
+      ['a\\', '\\a', '\\a\\'],
+      ['"', '"a', 'b"', '"c"'],
+    ]
+    for c in combinations:
+      self.args_test_helper(c)
 
 if __name__ == '__main__':
   absltest.main()
