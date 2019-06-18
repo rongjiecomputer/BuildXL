@@ -29,10 +29,14 @@ def RunCommandInSandbox(command, sandbox_options=[], **kwargs):
 
 class BazelSandboxTest(absltest.TestCase):
 
+  def assertExitStatus(self, actual_exitcode, expected_exitcode, stdout, stderr):
+    if actual_exitcode != expected_exitcode:
+      raise Exception(f"{actual_exitcode} != {expected_exitcode}\nstdout: {stdout}\nstderr: {stderr}")
+
   def test_system32(self):
     exitcode, stdout, stderr = RunCommandInSandbox(
         [r'C:\Windows\System32\cmd.exe', '/c', 'echo Hello World'])
-    self.assertEqual(exitcode, 0)
+    self.assertExitStatus(exitcode, 0, stdout, stderr)
     self.assertEqual(stdout, 'Hello World\n')
 
   def test_console_redirect(self):
@@ -41,10 +45,65 @@ class BazelSandboxTest(absltest.TestCase):
     exitcode, stdout, stderr = RunCommandInSandbox(
       [r'C:\Windows\System32\cmd.exe', '/c', 'echo Hello World'],
       ['-l', stdoutF.full_path])
-    self.assertEqual(exitcode, 0)
+    self.assertExitStatus(exitcode, 0, stdout, stderr)
     self.assertEqual(stdout, '')
     with open(stdoutF.full_path, 'r') as f:
       self.assertEqual(f.readline(), 'Hello World\n')
+
+  def test_absolute_path(self):
+    options = "lLwrW"
+    for opt in options:
+      exitcode, stdout, stderr = RunCommandInSandbox(
+        [r'C:\Windows\System32\cmd.exe', '/c', 'echo Hello World'],
+        ['-' + opt, 'dummy_relative_path'])
+      self.assertExitStatus(exitcode, 1, stdout, stderr)
+      self.assertStartsWith(stdout, "Cannot create absolute path from 'dummy_relative_path'")
+
+  def test_timeout_values(self):
+    options = "tT"
+    valid = ['0', '3', '10000']
+    invalid = ['', 'a', 'A', '"1"', '-1']
+    for opt in options:
+      for v in valid:
+        exitcode, stdout, stderr = RunCommandInSandbox(
+          [r'C:\Windows\System32\cmd.exe', '/c', 'echo Hello World'],
+          ['-' + opt, v])
+        self.assertExitStatus(exitcode, 0, stdout, stderr)
+        self.assertEqual(stdout, "Hello World\n")
+
+      for v in invalid:
+        exitcode, stdout, stderr = RunCommandInSandbox(
+          [r'C:\Windows\System32\cmd.exe', '/c', 'echo Hello World'],
+          ['-' + opt, v])
+        self.assertExitStatus(exitcode, 1, stdout, stderr)
+
+  def test_timeout(self):
+    bat = self.create_tempfile('test.bat', '@echo off\nSTART /WAIT timeout /T 5 /NOBREAK > NUL\necho Hello World')
+
+    # timeout = 0 means no timeout at all
+    exitcode, stdout, stderr = RunCommandInSandbox(
+      [r'C:\Windows\System32\cmd.exe', '/c', bat.full_path],
+      ['-T', '0', '-r', bat.full_path])
+    self.assertExitStatus(exitcode, 0, stdout, stderr)
+    self.assertEqual(stdout, 'Hello World\n')
+
+    exitcode, stdout, stderr = RunCommandInSandbox(
+      [r'C:\Windows\System32\cmd.exe', '/c', bat.full_path],
+      ['-T', '1', '-r', bat.full_path])
+    self.assertExitStatus(exitcode, 27021977, stdout, stderr)
+    self.assertEqual(stdout, '')
+
+  def test_empty_command(self):
+    # Nothing after '--'
+    exitcode, stdout, stderr = RunCommandInSandbox([])
+    self.assertExitStatus(exitcode, 1, stdout, stderr)
+    self.assertStartsWith(stdout, 'Command to sandboxed not specified')
+
+    # No '--'
+    exitcode, stdout, stderr = RunCommand(
+      [os.path.join(FLAGS.test_bazelsandbox_dir, 'BazelSandbox.exe')])
+    self.assertExitStatus(exitcode, 1, stdout, stderr)
+    self.assertStartsWith(stdout, 'Command to sandboxed not specified')
 
   def test_working_dir(self):
     dir = self.create_tempdir()
@@ -52,7 +111,7 @@ class BazelSandboxTest(absltest.TestCase):
     exitcode, stdout, stderr = RunCommandInSandbox(
       [r'C:\Windows\System32\cmd.exe', '/c', 'echo %CD%'],
       ['-W', dir.full_path])
-    self.assertEqual(exitcode, 0)
+    self.assertExitStatus(exitcode, 0, stdout, stderr)
     self.assertEqual(stdout, dir.full_path + '\n')
 
   def _setup(self):
@@ -69,7 +128,7 @@ class BazelSandboxTest(absltest.TestCase):
     exitcode, stdout, stderr = RunCommandInSandbox(
       [os.path.join(ROOT_DIR, 'test.exe')],
       ['-W', self.dir.full_path])
-    self.assertEqual(exitcode, 0)
+    self.assertExitStatus(exitcode, 0, stdout, stderr)
 
     self.assertContainsSubsequence(stdout.split('\n'), [
       'a.txt: failed to open for read',
@@ -81,7 +140,7 @@ class BazelSandboxTest(absltest.TestCase):
     exitcode, stdout, stderr = RunCommandInSandbox(
       [r'C:\Windows\System32\cmd.exe', '/c', 'dir /S /b .'],
       ['-W', self.dir.full_path])
-    self.assertEqual(exitcode, 0)
+    self.assertExitStatus(exitcode, 0, stdout, stderr)
     self.assertMultiLineEqual(stdout,
       '{0}\\a.txt\n{0}\\b.txt\n{0}\\c\n{0}\\c\\c.txt\n'.format(self.dir.full_path))
 
@@ -89,7 +148,7 @@ class BazelSandboxTest(absltest.TestCase):
     exitcode, stdout, stderr = RunCommandInSandbox(
       [os.path.join(ROOT_DIR, 'test.exe')],
       ['-W', self.dir.full_path, '-r', self.dir.full_path])
-    self.assertEqual(exitcode, 0)
+    self.assertExitStatus(exitcode, 0, stdout, stderr)
 
     self.assertContainsSubsequence(stdout.split('\n'), [
       'a.txt: Sherlock Holmes',
@@ -101,7 +160,7 @@ class BazelSandboxTest(absltest.TestCase):
     exitcode, stdout, stderr = RunCommandInSandbox(
       [os.path.join(ROOT_DIR, 'test.exe')],
       ['-W', self.dir.full_path, '-w', self.dir.full_path])
-    self.assertEqual(exitcode, 0)
+    self.assertExitStatus(exitcode, 0, stdout, stderr)
 
     self.assertContainsSubsequence(stdout.split('\n'), [
       'a.txt: Sherlock Holmes',
@@ -121,7 +180,7 @@ class BazelSandboxTest(absltest.TestCase):
     exitcode, stdout, stderr = RunCommandInSandbox(
       [r'C:\Windows\System32\cmd.exe', '/c', 'echo NAME=%NAME% & echo PATH=%PATH% & echo APPDATA=%APPDATA%'],
       env=env)
-    self.assertEqual(exitcode, 0)
+    self.assertExitStatus(exitcode, 0, stdout, stderr)
     self.assertMultiLineEqual(stdout,
       'NAME=Jarvis \n' +
       'PATH=C:\\Windows;C:\\Windows\\System32 \n' +
@@ -130,10 +189,7 @@ class BazelSandboxTest(absltest.TestCase):
   def args_test_helper(self, args):
     exitcode, stdout, stderr = RunCommandInSandbox(
       [os.path.join(ROOT_DIR, 'test.exe')] + args)
-    if exitcode != 0:
-      print("stdout:", stdout)
-      print("stderr:", stderr)
-    self.assertEqual(exitcode, 0)
+    self.assertExitStatus(exitcode, 0, stdout, stderr)
 
     args = [os.path.join(ROOT_DIR, 'test.exe')] + args
     expected_output = "".join(["argv: ({})\n".format(arg) for arg in args])
