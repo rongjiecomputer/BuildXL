@@ -47,8 +47,6 @@ const brandingDefines = [
 
 @@public
 export interface Arguments extends Managed.Arguments {
-    cscArgs?: Csc.Arguments;
-
     /** Provide switch to turn skip tool that adds GetTypeInfo() calls to generated resource code, so the tool can be compiled */
     skipResourceTranslator?: boolean;
 
@@ -109,8 +107,8 @@ export const isTargetRuntimeOsx : boolean = qualifier.targetRuntime === "osx-x64
 @@public
 export const restrictTestRunToDebugNet461OnWindows =
     qualifier.configuration !== "debug" ||
-    // Running tests for 4.6.1 and 4.7.2 frameworks only.
-    (qualifier.targetFramework !== "net461" && qualifier.targetFramework !== "net472") ||
+    // Running tests for .NET Core App 3.0 and 4.7.2 frameworks only.
+    (qualifier.targetFramework !== "netcoreapp3.0" && qualifier.targetFramework !== "net472") ||
     (Context.isWindowsOS() && qualifier.targetRuntime === "osx-x64");
 
 /***
@@ -286,6 +284,7 @@ export function executable(args: Arguments): Managed.Assembly {
         ],
         tools: {
             csc: {
+                platform: <"x64">"x64",
                 win32Icon: Branding.iconFile
             },
         },
@@ -332,7 +331,7 @@ export function cacheTest(args: TestArguments) : TestResult {
         // Cache tests don't use QTest because QTest doesn't support skipGroups and skipGroups is needed because cache tests fail otherwise.
         testFramework: XUnit.framework,
         runTestArgs: {
-            skipGroups: [ "QTestSkip", "Performance", "Simulation" ],
+            skipGroups: [ "QTestSkip", "Performance", "Simulation", ...(isDotNetCoreBuild ? [ "SkipDotNetCore" ] : []) ],
             tools: {
                 exec: {
                     environmentVariables: Environment.hasVariable(envVarNamePrefix + redisConnectionStringEnvVarName) ? [ {name: redisConnectionStringEnvVarName, value: Environment.getStringValue(envVarNamePrefix + redisConnectionStringEnvVarName)}] : []

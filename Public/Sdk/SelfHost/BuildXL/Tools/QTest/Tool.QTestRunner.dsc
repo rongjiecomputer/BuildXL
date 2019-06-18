@@ -194,7 +194,10 @@ export function runQTest(args: QTestArguments): Result {
         workingDirectory: sandboxDir,
         tempDirectory: tempDirectory,
         weight: args.weight,
-        environmentVariables: [{ name: "[Sdk.BuildXL]qCodeCoverageEnumType", value: qCodeCoverageEnumType }],
+        environmentVariables: [
+            { name: "[Sdk.BuildXL]qCodeCoverageEnumType", value: qCodeCoverageEnumType },
+            ...(args.qTestEnvironmentVariables || [])
+        ],
         disableCacheLookup: Environment.getFlag("[Sdk.BuildXL]qTestForceTest"),
         additionalTempDirectories : [sandboxDir],
         privilegeLevel: args.privilegeLevel,
@@ -205,6 +208,7 @@ export function runQTest(args: QTestArguments): Result {
             ...(args.qTestInputs ? args.qTestInputs.filter(
                 f => f.name.hasExtension && f.name.extension === a`.pdb`
             ) : []),
+            ...(args.qTestRuntimeDependencies || []),
         ],
         unsafe: unsafeOptions
     });
@@ -328,6 +332,8 @@ export interface QTestArguments extends Transformer.RunnerArguments {
     privilegeLevel?: "standard" | "admin";
     /** Specifies the build type */
     qTestBuildType?: string;
+    /** Specifies the environment variables to forward to qtest */
+    qTestEnvironmentVariables?: Transformer.EnvironmentVariable[];
 }
 /**
  * Test results from a vstest.console.exe run

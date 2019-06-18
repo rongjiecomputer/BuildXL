@@ -1471,19 +1471,21 @@ namespace BuildXL.Engine
             Contract.Requires(loggingContext != null);
 
             // Under some configurations, we access the change journal (i.e., actually scan the journal).
-            var journal = Configuration.Engine.ScanChangeJournal
-                ? JournalAccessorGetter.TryGetJournalAccessor(
-                    loggingContext,
-                    volumeMap,
-                    m_initialCommandLineConfiguration.Startup.ConfigFile.ToString(Context.PathTable))
-                : default;
-
-            if (!journal.IsValid)
+            if (Configuration.Engine.ScanChangeJournal)
             {
-                Logger.Log.FailedToGetJournalAccessor(loggingContext);
+                var maybeJournal = JournalAccessorGetter.TryGetJournalAccessor(
+                    volumeMap,
+                    m_initialCommandLineConfiguration.Startup.ConfigFile.ToString(Context.PathTable));
+
+                if (maybeJournal.Succeeded)
+                {
+                    return JournalState.CreateEnabledJournal(volumeMap, maybeJournal.Result);
+                }
+
+                Logger.Log.FailedToGetJournalAccessor(loggingContext, maybeJournal.Failure.Describe());
             }
 
-            return journal.IsValid ? JournalState.CreateEnabledJournal(volumeMap, journal.Value) : JournalState.DisabledJournal;
+            return JournalState.DisabledJournal;
         }
 
         [SuppressMessage("Microsoft.Maintainability", "CA1505:AvoidUnmaintainableCode")]
@@ -2191,6 +2193,8 @@ namespace BuildXL.Engine
                 { "unsafe_DisableSharedOpaqueEmptyDirectoryScrubbing", Logger.Log.ConfigUnsafeDisableSharedOpaqueEmptyDirectoryScrubbing },
                 { "unsafe_ExistingDirectoryProbesAsEnumerations", Logger.Log.ConfigUnsafeExistingDirectoryProbesAsEnumerations },
                 { "unsafe_ForceSkipDeps", Logger.Log.ForceSkipDependenciesEnabled },
+                { "unsafe_GlobalPassthroughEnvVars",  loggingContext => { } /* Special case: unsafe option we do not want logged */ },
+                { "unsafe_GlobalUntrackedScopes",  loggingContext => { } /* Special case: unsafe option we do not want logged */ },
                 { "unsafe_IgnoreGetFinalPathNameByHandle", Logger.Log.ConfigIgnoreGetFinalPathNameByHandle },
                 { "unsafe_IgnoreNonCreateFileReparsePoints", Logger.Log.ConfigIgnoreNonCreateFileReparsePoints },
                 { "unsafe_IgnoreNtCreateFile", Logger.Log.ConfigUnsafeMonitorNtCreateFileOff },

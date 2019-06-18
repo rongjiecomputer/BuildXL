@@ -60,9 +60,6 @@ namespace BuildXL.Cache.Host.Service.Internal
             bool checkLocalFiles = true,
             TrimBulkAsync trimBulkAsync = null)
         {
-            var contentConnectionStringProvider = new HostConnectionStringProvider(_arguments.Host, _redisContentSecretNames.RedisContentSecretName, _logger);
-            var machineLocationsConnectionStringProvider = new HostConnectionStringProvider(_arguments.Host, _redisContentSecretNames.RedisMachineLocationsSecretName, _logger);
-
             var redisContentLocationStoreConfiguration = new RedisContentLocationStoreConfiguration
             {
                 RedisBatchPageSize = _distributedSettings.RedisBatchPageSize,
@@ -90,6 +87,13 @@ namespace BuildXL.Cache.Host.Service.Internal
                     dbConfig.LocalDatabaseGarbageCollectionInterval = TimeSpan.FromMinutes(_distributedSettings.ContentLocationDatabaseGcIntervalMinutes.Value);
                 }
 
+                ApplyIfNotNull(_distributedSettings.ContentLocationDatabaseCacheEnabled, v => dbConfig.CacheEnabled = v);
+                ApplyIfNotNull(_distributedSettings.ContentLocationDatabaseFlushDegreeOfParallelism, v => dbConfig.FlushDegreeOfParallelism = v);
+                ApplyIfNotNull(_distributedSettings.ContentLocationDatabaseFlushSingleTransaction, v => dbConfig.FlushSingleTransaction = v);
+                ApplyIfNotNull(_distributedSettings.ContentLocationDatabaseFlushPreservePercentInMemory, v => dbConfig.FlushPreservePercentInMemory = v);
+                ApplyIfNotNull(_distributedSettings.ContentLocationDatabaseCacheMaximumUpdatesPerFlush, v => dbConfig.CacheMaximumUpdatesPerFlush = v);
+                ApplyIfNotNull(_distributedSettings.ContentLocationDatabaseCacheFlushingMaximumInterval, v => dbConfig.CacheFlushingMaximumInterval = v);
+
                 ApplySecretSettingsForLlsAsync(redisContentLocationStoreConfiguration, localCacheRoot).GetAwaiter().GetResult();
             }
 
@@ -107,6 +111,10 @@ namespace BuildXL.Cache.Host.Service.Internal
 
             var localMachineLocation = _arguments.PathTransformer.GetLocalMachineLocation(localCacheRoot);
             var contentHashBumpTime = TimeSpan.FromMinutes(_distributedSettings.ContentHashBumpTimeMinutes);
+
+            // RedisContentSecretName and RedisMachineLocationsSecretName can be null. HostConnectionStringProvider won't fail in this case.
+            IConnectionStringProvider contentConnectionStringProvider = TryCreateRedisConnectionStringProvider(_redisContentSecretNames.RedisContentSecretName);
+            IConnectionStringProvider machineLocationsConnectionStringProvider = TryCreateRedisConnectionStringProvider(_redisContentSecretNames.RedisMachineLocationsSecretName);
 
             var redisContentLocationStoreFactory = new RedisContentLocationStoreFactory(
                 contentConnectionStringProvider,
@@ -191,20 +199,27 @@ namespace BuildXL.Cache.Host.Service.Internal
             return contentStore;
         }
 
+        private IConnectionStringProvider TryCreateRedisConnectionStringProvider(string secretName)
+        {
+            return string.IsNullOrEmpty(secretName)
+                ? null
+                : new HostConnectionStringProvider(_arguments.Host, secretName, _logger);
+        }
+
         private static ContentStoreSettings FromDistributedSettings(DistributedContentSettings settings)
         {
             return new ContentStoreSettings()
-                         {
-                             UseEmptyFileHashShortcut = settings.EmptyFileHashShortcutEnabled,
-                             CheckFiles = settings.CheckLocalFiles,
-                             UseLegacyQuotaKeeperImplementation = settings.UseLegacyQuotaKeeperImplementation,
-                             StartPurgingAtStartup = settings.StartPurgingAtStartup,
-                             UseNativeBlobEnumeration = settings.UseNativeBlobEnumeration,
-                             SelfCheckEpoch = settings.SelfCheckEpoch,
-                             StartSelfCheckInStartup = settings.StartSelfCheckAtStartup,
-                             SelfCheckFrequency = TimeSpan.FromMinutes(settings.SelfCheckFrequencyInMinutes),
-                             OverrideUnixFileAccessMode = settings.OverrideUnixFileAccessMode
-                         };
+            {
+                UseEmptyFileHashShortcut = settings.EmptyFileHashShortcutEnabled,
+                CheckFiles = settings.CheckLocalFiles,
+                UseLegacyQuotaKeeperImplementation = settings.UseLegacyQuotaKeeperImplementation,
+                StartPurgingAtStartup = settings.StartPurgingAtStartup,
+                UseNativeBlobEnumeration = settings.UseNativeBlobEnumeration,
+                SelfCheckEpoch = settings.SelfCheckEpoch,
+                StartSelfCheckInStartup = settings.StartSelfCheckAtStartup,
+                SelfCheckFrequency = TimeSpan.FromMinutes(settings.SelfCheckFrequencyInMinutes),
+                OverrideUnixFileAccessMode = settings.OverrideUnixFileAccessMode
+            };
         }
 
         private async Task ApplySecretSettingsForLlsAsync(RedisContentLocationStoreConfiguration configuration, AbsolutePath localCacheRoot)
@@ -266,12 +281,12 @@ namespace BuildXL.Cache.Host.Service.Internal
                 value => configuration.WriteMode = (ContentLocationMode)Enum.Parse(typeof(ContentLocationMode), value));
             ApplyIfNotNull(_distributedSettings.LocationEntryExpiryMinutes, value => configuration.LocationEntryExpiry = TimeSpan.FromMinutes(value));
 
-            var storageConnectionStrings = GetStorageConnectionStrings(secrets, errorBuilder);
+            var storageCredentials = GetStorageCredentials(secrets, errorBuilder);
             // We already retrieved storage connection strings, so the result should not be null.
-            Contract.Assert(storageConnectionStrings != null);
+            Contract.Assert(storageCredentials != null);
 
             var blobStoreConfiguration = new BlobCentralStoreConfiguration(
-                connectionStrings: storageConnectionStrings,
+                credentials: storageCredentials,
                 containerName: "checkpoints",
                 checkpointsKey: "checkpoints-eventhub");
 
@@ -283,13 +298,13 @@ namespace BuildXL.Cache.Host.Service.Internal
             if (_distributedSettings.UseDistributedCentralStorage)
             {
                 configuration.DistributedCentralStore = new DistributedCentralStoreConfiguration(localCacheRoot)
-                                                        {
-                                                            MaxRetentionGb = _distributedSettings.MaxCentralStorageRetentionGb,
-                                                            PropagationDelay = TimeSpan.FromSeconds(
+                {
+                    MaxRetentionGb = _distributedSettings.MaxCentralStorageRetentionGb,
+                    PropagationDelay = TimeSpan.FromSeconds(
                                                                 _distributedSettings.CentralStoragePropagationDelaySeconds),
-                                                            PropagationIterations = _distributedSettings.CentralStoragePropagationIterations,
-                                                            MaxSimultaneousCopies = _distributedSettings.CentralStorageMaxSimultaneousCopies
-                                                        };
+                    PropagationIterations = _distributedSettings.CentralStoragePropagationIterations,
+                    MaxSimultaneousCopies = _distributedSettings.CentralStorageMaxSimultaneousCopies
+                };
             }
 
             var eventStoreConfiguration = new EventHubContentLocationEventStoreConfiguration(
@@ -304,7 +319,7 @@ namespace BuildXL.Cache.Host.Service.Internal
                 value => eventStoreConfiguration.MaxEventProcessingConcurrency = value);
         }
 
-        private string[] GetStorageConnectionStrings(Dictionary<string, string> settings, StringBuilder errorBuilder)
+        private AzureBlobStorageCredentials[] GetStorageCredentials(Dictionary<string, string> settings, StringBuilder errorBuilder)
         {
             var storageSecretNames = GetAzureStorageSecretNames(errorBuilder);
             if (storageSecretNames == null)
@@ -312,7 +327,9 @@ namespace BuildXL.Cache.Host.Service.Internal
                 return null;
             }
 
-            return storageSecretNames.Select(name => GetRequiredSecret(settings, name)).ToArray();
+            return storageSecretNames.Select(name => {
+                return new AzureBlobStorageCredentials(GetRequiredSecret(settings, name));
+            }).ToArray();
         }
 
         private List<string> GetAzureStorageSecretNames(StringBuilder errorBuilder)
