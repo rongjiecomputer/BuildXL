@@ -36,13 +36,7 @@ namespace BazelSandbox {
         ],
         runtimeContent: [
             ...addIfLazy(qualifier.targetRuntime === "win-x64", () => [
-                importFrom("BuildXL.Sandbox.Windows").Deployment.definition,
-                {
-                    // subfolder: a`DetoursCrossBitTests`,
-                    contents: [
-                        importFrom("BuildXL.Sandbox.Windows").Deployment.definition,
-                    ]
-                },
+                importFrom("BuildXL.Sandbox.Windows").Deployment.detours,
             ]),
         ],
     });
