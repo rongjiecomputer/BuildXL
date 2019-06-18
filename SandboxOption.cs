@@ -26,7 +26,7 @@ namespace Bazel {
     /// </summary>
     public class SandboxOptions {
         /// <nodoc />
-        public static readonly uint kInfiniteTime = 0xffffffff;
+        public static readonly uint kInfiniteTime = 0;
 
         /// <summary>
         /// Working directory (-W)

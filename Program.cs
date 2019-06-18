@@ -39,6 +39,9 @@ namespace Bazel
 
             sandbox.Cleanup();
 
+            // Note: BuildXL may produce different exit code in certain situations.
+            // https://github.com/microsoft/BuildXL/blob/master/Public/Src/Engine/Processes/ExitCodes.cs
+
             return result.ExitCode;
         }
     }
