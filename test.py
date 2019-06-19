@@ -64,6 +64,13 @@ class BazelSandboxTest(absltest.TestCase):
     self.assertExitStatus(exitcode, 0, stdout, stderr)
     self.assertEqual(stdout, 'Hello World\n')
 
+    # '@' after '--' should not be expanded
+    exitcode, stdout, stderr = RunCommand(
+      [os.path.join(FLAGS.test_bazelsandbox_dir, 'BazelSandbox.exe'), '--',
+      r'C:\Windows\System32\cmd.exe', '/c', 'echo Hello World', '@dummy'])
+    self.assertExitStatus(exitcode, 0, stdout, stderr)
+    self.assertEqual(stdout, 'Hello World @dummy\n')
+
   def test_absolute_path(self):
     options = "lLwrW"
     for opt in options:

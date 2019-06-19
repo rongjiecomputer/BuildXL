@@ -184,14 +184,23 @@ namespace Bazel {
             this.args = args.Skip(i + 1).ToList();
         }
 
+        /// <summary>
+        /// Expand param files in args. Expanding stops when first '--' is encountered.
+        /// </summary>
         private static List<string> ExpandArguments(IList<string> args)
         {
-            List<string> expanded = new List<string>(args.Count);
-            foreach (var arg in args)
+            List<string> expanded = new List<string>(args.Count());
+            for (int i = 0; i < args.Count(); i++)
             {
+                string arg = args[i];
                 if (arg.Length > 1 && arg[0] == '@')
                 {
                     expanded.AddRange(File.ReadLines(arg.Substring(1)));
+                }
+                else if (arg == "--")
+                {
+                    expanded.AddRange(args.Skip(i));
+                    break;
                 }
                 else
                 {
