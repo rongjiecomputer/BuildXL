@@ -15,6 +15,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using BuildXL.Processes;
@@ -74,15 +75,14 @@ namespace Bazel {
         /// <summary>
         /// Parse args into SandboxOptions
         /// </summary>
-        /// <param name="args"></param>
-        /// <param name="pathTable"></param>
-        public void ParseOptions(string[] args, PathTable pathTable)
+        public void ParseOptions(List<string> args, PathTable pathTable)
         {
+            args = ExpandArguments(args);
             int i = 0;
-            for (; i < args.Length && args[i] != "--"; i++)
+            for (; i < args.Count() && args[i] != "--"; i++)
             {
                 var arg = args[i];
-                if (arg.Length > 1 && (arg[0] == '/' || arg[0] == '-'))
+                if (arg.Count() > 1 && (arg[0] == '/' || arg[0] == '-'))
                 {
                     var name = arg.Substring(1);
                     switch (name)
@@ -172,20 +172,33 @@ namespace Bazel {
                             break;
                     }
                 }
-                else if (args.Length > 1 && arg[0] == '@')
-                {
-                    ExitWithError("Param file handling not yet implemented");
-                }
                 else
                 {
                     ExitWithError($"Unknown argument: {arg}");
                 }
             }
-            if (i >= args.Length - 1 || args[i] != "--")
+            if (i >= args.Count - 1 || args[i] != "--")
             {
                 ExitWithError("Command to sandboxed not specified");
             }
             this.args = args.Skip(i + 1).ToList();
+        }
+
+        private static List<string> ExpandArguments(IList<string> args)
+        {
+            List<string> expanded = new List<string>(args.Count);
+            foreach (var arg in args)
+            {
+                if (arg.Length > 1 && arg[0] == '@')
+                {
+                    expanded.AddRange(File.ReadLines(arg.Substring(1)));
+                }
+                else
+                {
+                    expanded.Add(arg);
+                }
+            }
+            return expanded;
         }
 
         private void ExitWithError(string msg) {

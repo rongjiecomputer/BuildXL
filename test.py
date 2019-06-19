@@ -50,6 +50,20 @@ class BazelSandboxTest(absltest.TestCase):
     with open(stdoutF.full_path, 'r') as f:
       self.assertEqual(f.readline(), 'Hello World\n')
 
+  def test_param_file(self):
+    param = self.create_tempfile('param.txt', '--\nC:\\Windows\\System32\\cmd.exe\n/c\necho Hello World')
+    exitcode, stdout, stderr = RunCommand(
+      [os.path.join(FLAGS.test_bazelsandbox_dir, 'BazelSandbox.exe'), '@' + param.full_path])
+    self.assertExitStatus(exitcode, 0, stdout, stderr)
+    self.assertEqual(stdout, 'Hello World\n')
+
+    param1 = self.create_tempfile('param1.txt', '--\nC:\\Windows\\System32\\cmd.exe')
+    param2 = self.create_tempfile('param2.txt', '/c\necho Hello World')    
+    exitcode, stdout, stderr = RunCommand(
+      [os.path.join(FLAGS.test_bazelsandbox_dir, 'BazelSandbox.exe'), '@' + param1.full_path, '@' + param2.full_path])
+    self.assertExitStatus(exitcode, 0, stdout, stderr)
+    self.assertEqual(stdout, 'Hello World\n')
+
   def test_absolute_path(self):
     options = "lLwrW"
     for opt in options:

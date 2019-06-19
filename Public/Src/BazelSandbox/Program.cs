@@ -15,6 +15,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using Bazel;
 using BuildXL.Processes;
 using BuildXL.Utilities;
@@ -32,7 +33,7 @@ namespace Bazel
             var pathTable = new PathTable();
 
             SandboxOptions options = new SandboxOptions();
-            options.ParseOptions(args, pathTable);
+            options.ParseOptions(args.ToList(), pathTable);
 
             var sandbox = new SandboxedProcess(pathTable);
             var result = sandbox.Run(options).GetAwaiter().GetResult();
