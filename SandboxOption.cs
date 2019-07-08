@@ -87,6 +87,11 @@ namespace Bazel {
                     var name = arg.Substring(1);
                     switch (name)
                     {
+                        case "h":
+                            {
+                                PrintUsage(0);
+                                break;
+                            }
                         case "W":
                             {
                                 var path = AbsolutePath.Invalid;
@@ -212,10 +217,10 @@ namespace Bazel {
 
         private void ExitWithError(string msg) {
             Console.WriteLine(msg);
-            PrintUsage();
+            PrintUsage(1);
         }
 
-        private void PrintUsage() {
+        private void PrintUsage(int exitCode) {
             var processName = Process.GetCurrentProcess().ProcessName;
             Console.Write(
                     $"\nUsage: {processName} [option...] -- command [arg...]\n" +
@@ -236,7 +241,7 @@ namespace Bazel {
                     "  -D  print debug messages to stdout\n" +
                     "  @FILE  read newline-separated arguments from FILE\n" +
                     "  --  command to run inside sandbox, followed by arguments\n");
-            Environment.Exit(1);
+            Environment.Exit(exitCode);
         }
     }
 }
