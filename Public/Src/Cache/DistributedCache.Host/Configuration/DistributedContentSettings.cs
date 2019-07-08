@@ -431,12 +431,6 @@ namespace BuildXL.Cache.Host.Configuration
         [DataMember]
         public bool OverrideUnixFileAccessMode { get; set; } = false;
 
-        /// <summary>
-        /// Gets or sets whether to override Unix file access modes.
-        /// </summary>
-        [DataMember]
-        public bool OverrideUnixFileAccessMode { get; set; } = false;
-
         #endregion
 
         /// <summary>

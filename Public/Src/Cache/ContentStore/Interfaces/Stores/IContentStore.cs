@@ -2,6 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System.Threading.Tasks;
+using BuildXL.Cache.ContentStore.Hashing;
 using BuildXL.Cache.ContentStore.Interfaces.Results;
 using BuildXL.Cache.ContentStore.Interfaces.Sessions;
 using BuildXL.Cache.ContentStore.Interfaces.Tracing;
@@ -28,5 +29,21 @@ namespace BuildXL.Cache.ContentStore.Interfaces.Stores
         ///     Gets a current stats snapshot.
         /// </summary>
         Task<GetStatsResult> GetStatsAsync(Context context);
+
+        /// <summary>
+        ///     Remove given content from all sessions.
+        /// </summary>
+        Task<DeleteResult> DeleteAsync(Context context, ContentHash contentHash);
+    }
+
+    /// <summary>
+    /// Special <see cref="IContentStore"/> version that supports notification about initialization completion.
+    /// </summary>
+    public interface IContentStoreWithPostInitialization : IContentStore
+    {
+        /// <summary>
+        /// Notifies that the post initialization step of the outer component is finished.
+        /// </summary>
+        void PostInitializationCompleted(Context context, BoolResult result);
     }
 }

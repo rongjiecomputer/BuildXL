@@ -1605,9 +1605,24 @@ namespace BuildXL.Processes
                 }
             }
 
-            // Untrack the globally untracked paths specified in the configuration 
+            // Untrack the globally untracked paths specified in the configuration     
             foreach (var path in m_sandboxConfig.GlobalUnsafeUntrackedScopes)
             {
+                // translate the path and untrack the translated one                
+                if (m_fileAccessManifest.DirectoryTranslator != null)
+                {
+                    var pathString = path.ToString(m_pathTable);
+                    var translatedPathString = m_fileAccessManifest.DirectoryTranslator.Translate(pathString);
+                    var translatedPath = AbsolutePath.Create(m_pathTable, translatedPathString);
+
+                    if (path != translatedPath)
+                    {
+                        m_fileAccessManifest.AddScope(translatedPath, mask: m_excludeReportAccessMask, values: FileAccessPolicy.AllowAll | FileAccessPolicy.AllowRealInputTimestamps);
+                        Tracing.Logger.Log.TranslatePathInGlobalUnsafeUntrackedScopes(loggingContext, m_pip.SemiStableHash, m_pip.GetDescription(m_context), pathString);
+                    }
+                }               
+
+                // untrack the original path
                 m_fileAccessManifest.AddScope(path, mask: m_excludeReportAccessMask, values: FileAccessPolicy.AllowAll | FileAccessPolicy.AllowRealInputTimestamps);
             }
 
@@ -1798,7 +1813,13 @@ namespace BuildXL.Processes
                             FileAccessPolicy.AllowAll | // Symlink creation is allowed under opaques.
                             FileAccessPolicy.AllowRealInputTimestamps |
                             // For shared opaques, we need to know the (write) accesses that occurred, since we determine file ownership based on that.
-                            (directory.IsSharedOpaque? FileAccessPolicy.ReportAccess : FileAccessPolicy.Deny);
+                            (directory.IsSharedOpaque? FileAccessPolicy.ReportAccess : FileAccessPolicy.Deny) |
+                            // For shared opaques and if allowed undeclared source reads is enabled, make sure that any file used as an undeclared input under the 
+                            // shared opaque gets deny write access. Observe that with exclusive opaques they are wiped out before the pip runs, so it is moot to check for inputs
+                            // TODO: considering configuring this policy for all shared opaques, and not only when AllowedUndeclaredSourceReads is set. The case of a write on an undeclared
+                            // input is more likely to happen when undeclared sources are allowed, but also possible otherwise. For now, this is just a conservative way to try this feature
+                            // out for a subset of our scenarios.
+                            (m_pip.AllowUndeclaredSourceReads && directory.IsSharedOpaque ? FileAccessPolicy.OverrideAllowWriteForExistingFiles : FileAccessPolicy.Deny);
 
                         // For exclusive opaques, we don't need reporting back and the content is discovered by enumerating the disk
                         var mask = directory.IsSharedOpaque ? FileAccessPolicy.MaskNothing : m_excludeReportAccessMask;
@@ -2902,14 +2923,19 @@ namespace BuildXL.Processes
                             continue;
                         }
 
-                        // If the access occurred under any of the pip shared opaque outputs, and the access is not happening on any known input paths (neither dynamic nor static)
-                        // then we just skip reporting the access. Together with the above step, this means that no accesses under shared opaques that represent outputs are actually
-                        // reported as observed accesses. This matches the same behavior that occurs on static outputs.
-                        if (!allInputPathsUnderSharedOpaques.Contains(entry.Key) && IsAccessUnderASharedOpaque(firstAccess, dynamicWriteAccesses, out _))
+                        // The following two lines need to be removed in order to report file accesses for
+                        // undeclared files and sealed directories. But since this is a breaking change, we do
+                        // it under an unsafe flag.
+                        if (m_sandboxConfig.UnsafeSandboxConfiguration.IgnoreUndeclaredAccessesUnderSharedOpaques)
                         {
-                            continue;
+                            // If the access occurred under any of the pip shared opaque outputs, and the access is not happening on any known input paths (neither dynamic nor static)
+                            // then we just skip reporting the access. Together with the above step, this means that no accesses under shared opaques that represent outputs are actually
+                            // reported as observed accesses. This matches the same behavior that occurs on static outputs.
+                            if (!allInputPathsUnderSharedOpaques.Contains(entry.Key) && IsAccessUnderASharedOpaque(firstAccess, dynamicWriteAccesses, out _))
+                            {
+                                continue;
+                            }
                         }
-
                         ObservationFlags observationFlags = ObservationFlags.None;
 
                         if (isProbe)
@@ -3534,7 +3560,7 @@ namespace BuildXL.Processes
                 AddTrailingNewLineIfNeeded(outputPathsToLog),
                 result.ExitCode,
                 // if the process finished successfully (exit code 0) and we entered this method --> some outputs are missing
-                exitedWithSuccessExitCode ? BuildXL.Utilities.Tracing.Events.PipProcessErrorMissingOutputsSuffix : string.Empty);
+                exitedWithSuccessExitCode ? EventConstants.PipProcessErrorMissingOutputsSuffix : string.Empty);
         }
 
         private void HandleErrorsFromTool(string error)
