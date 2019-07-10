@@ -211,7 +211,7 @@ namespace Bazel
         /// <nodoc />
         private FileAccessManifest CreateManifest(AbsolutePath pathToProcess, SandboxOptions option)
         {
-            var fileAccessManifest = new FileAccessManifest(m_pathTable)
+            var fam = new FileAccessManifest(m_pathTable)
             {
                 FailUnexpectedFileAccesses = true,
                 ReportFileAccesses = false,
@@ -220,68 +220,68 @@ namespace Bazel
             };
 
             // We block all file accesses at the root level, so by default everything is blocked
-            fileAccessManifest.AddScope(AbsolutePath.Invalid, FileAccessPolicy.MaskNothing, FileAccessPolicy.Deny);
+            fam.AddScope(AbsolutePath.Invalid, FileAccessPolicy.MaskNothing, FileAccessPolicy.Deny);
 
-            fileAccessManifest.AddScope(option.working_dir, FileAccessPolicy.MaskAll, FileAccessPolicy.Deny);
+            // Block working dir
+            AddBlockedPath(fam, option, option.working_dir);
 
             // We explicitly allow reading from the tool path
-            fileAccessManifest.AddPath(pathToProcess, FileAccessPolicy.MaskAll, FileAccessPolicy.AllowRead);
+            AddReadOnlyPath(fam, option, pathToProcess);
 
             // We allow some special folders and temp folder
-            fileAccessManifest.AddScope(
-                AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.Windows)),
-                FileAccessPolicy.MaskAll,
-                FileAccessPolicy.AllowAll);
-
-            fileAccessManifest.AddScope(
-                AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.ProgramFiles)),
-                FileAccessPolicy.MaskAll,
-                FileAccessPolicy.AllowAll);
-
-            fileAccessManifest.AddScope(
-                AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)),
-                FileAccessPolicy.MaskAll,
-                FileAccessPolicy.AllowAll);
-
-            fileAccessManifest.AddScope(
-                AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.CommonApplicationData)),
-                FileAccessPolicy.MaskAll,
-                FileAccessPolicy.AllowAll);
-
-            fileAccessManifest.AddScope(
-                AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.InternetCache)),
-                FileAccessPolicy.MaskAll,
-                FileAccessPolicy.AllowAll);
-
-            fileAccessManifest.AddScope(
-                AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.History)),
-                FileAccessPolicy.MaskAll,
-                FileAccessPolicy.AllowAll);
-
-            fileAccessManifest.AddScope(
-                AbsolutePath.Create(m_pathTable, Environment.GetEnvironmentVariable("TEMP")),
-                FileAccessPolicy.MaskAll,
-                FileAccessPolicy.AllowAll);
+            AddReadWritePath(fam, option, AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.Windows)));
+            AddReadWritePath(fam, option, AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.ProgramFiles)));
+            AddReadWritePath(fam, option, AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)));
+            AddReadWritePath(fam, option, AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.CommonApplicationData)));
+            AddReadWritePath(fam, option, AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.InternetCache)));
+            AddReadWritePath(fam, option, AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.History)));
+            AddReadWritePath(fam, option, AbsolutePath.Create(m_pathTable, Environment.GetEnvironmentVariable("TEMP")));
 
             // We allow access on all provided files/directories
             // Note: if C:\A is allowed, its subtree is allowed too.
             foreach (var path in option.readonly_files)
             {
-                fileAccessManifest.AddScope(
-                    path,
-                    FileAccessPolicy.MaskAll,
-                    FileAccessPolicy.AllowRead);
+                AddReadOnlyPath(fam, option, path);
             }
 
             foreach (var path in option.writable_files)
             {
-                fileAccessManifest.AddScope(
-                    path,
-                    FileAccessPolicy.MaskAll,
-                    FileAccessPolicy.AllowAll);
+                AddReadWritePath(fam, option, path);
             }
 
-            return fileAccessManifest;
+            foreach (var path in option.blocked_files)
+            {
+                AddBlockedPath(fam, option, path);
+            }
+
+            return fam;
+        }
+
+        private void AddReadOnlyPath(FileAccessManifest fam, SandboxOptions option, AbsolutePath path)
+        {
+            if (option.debug)
+            {
+                Console.Error.WriteLine($"ro: {path.ToString(m_pathTable)}");
+            }
+            fam.AddScope(path, FileAccessPolicy.MaskAll, FileAccessPolicy.AllowRead);
+        }
+
+        private void AddReadWritePath(FileAccessManifest fam, SandboxOptions option, AbsolutePath path)
+        {
+            if (option.debug)
+            {
+                Console.Error.WriteLine($"rw: {path.ToString(m_pathTable)}");
+            }
+            fam.AddScope(path, FileAccessPolicy.MaskAll, FileAccessPolicy.AllowAll);
+        }
+
+        private void AddBlockedPath(FileAccessManifest fam, SandboxOptions option, AbsolutePath path)
+        {
+            if (option.debug)
+            {
+                Console.Error.WriteLine($"na: {path.ToString(m_pathTable)}");
+            }
+            fam.AddScope(path, FileAccessPolicy.MaskAll, FileAccessPolicy.Deny);
         }
     }
 }
