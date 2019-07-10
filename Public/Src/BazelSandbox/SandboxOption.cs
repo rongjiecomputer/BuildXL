@@ -58,6 +58,10 @@ namespace Bazel {
         /// Files or directories to make read/writable for the sandboxed process (-w)
         /// </summary>
         public List<AbsolutePath> writable_files { get; private set; } = new List<AbsolutePath>();
+        /// <summary>
+        /// Files or directories to make inaccessible for the sandboxed process (-w)
+        /// </summary>
+        public List<AbsolutePath> blocked_files { get; private set; } = new List<AbsolutePath>();
         // Where to write stats, in protobuf format (-S)
         // public AbsolutePath stats_path { get; private set; } = AbsolutePath.Invalid;
         /// <summary>
@@ -167,6 +171,16 @@ namespace Bazel {
                                 this.readonly_files.Add(path);
                                 break;
                             }
+                        case "b":
+                            {
+                                var path = AbsolutePath.Invalid;
+                                if (!AbsolutePath.TryCreate(pathTable, args[++i], out path))
+                                {
+                                    ExitWithError($"Cannot create absolute path from '{args[i]}'");
+                                }
+                                this.blocked_files.Add(path);
+                                break;
+                            }
                         case "D":
                             {
                                 this.debug = true;
@@ -236,6 +250,8 @@ namespace Bazel {
                     "  -w <file>  make a file or directory read/writable for the sandboxed " +
                     "process\n" +
                     "  -r <file>  make a file or directory readonly for the sandboxed " +
+                    "process\n" +
+                    "  -b <file>  make a file or directory inaccessible for the sandboxed " +
                     "process\n" +
                     // "  -S <file>  if set, write stats in protobuf format to a file\n" +
                     "  -D  print debug messages to stdout\n" +
