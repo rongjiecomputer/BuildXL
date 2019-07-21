@@ -51,7 +51,8 @@ namespace Bazel
         {
             var pathToProcess = option.args[0];
 
-            var fam = CreateManifest(AbsolutePath.Create(m_pathTable, pathToProcess), option);
+            var workingDir = option.working_dir != AbsolutePath.Invalid ? option.working_dir.ToString(m_pathTable) : Environment.CurrentDirectory;
+            var fam = CreateManifest(AbsolutePath.Create(m_pathTable, pathToProcess), option, workingDir);
 
             Action<string> stdoutCallback;
             if (option.stdout_path != AbsolutePath.Invalid)
@@ -74,8 +75,6 @@ namespace Bazel
             {
                 stderrCallback = s => Console.Error.WriteLine(s);
             }
-
-            var workingDir = option.working_dir != AbsolutePath.Invalid ? option.working_dir.ToString(m_pathTable) : Environment.CurrentDirectory;
 
             var info = new SandboxedProcessInfo(
                 m_pathTable,
@@ -209,7 +208,7 @@ namespace Bazel
         }
 
         /// <nodoc />
-        private FileAccessManifest CreateManifest(AbsolutePath pathToProcess, SandboxOptions option)
+        private FileAccessManifest CreateManifest(AbsolutePath pathToProcess, SandboxOptions option, string workingDir)
         {
             var fam = new FileAccessManifest(m_pathTable)
             {
@@ -219,23 +218,14 @@ namespace Bazel
                 MonitorChildProcesses = true,
             };
 
-            // We block all file accesses at the root level, so by default everything is blocked
-            fam.AddScope(AbsolutePath.Invalid, FileAccessPolicy.MaskNothing, FileAccessPolicy.Deny);
+            // We make whole filesystem as read-only.
+            fam.AddScope(AbsolutePath.Invalid, FileAccessPolicy.MaskAll, FileAccessPolicy.AllowRead);
 
             // Block working dir
-            AddBlockedPath(fam, option, option.working_dir);
+            AddBlockedPath(fam, option, AbsolutePath.Create(m_pathTable, workingDir));
 
             // We explicitly allow reading from the tool path
             AddReadOnlyPath(fam, option, pathToProcess);
-
-            // We allow some special folders and temp folder
-            AddReadWritePath(fam, option, AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.Windows)));
-            AddReadWritePath(fam, option, AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.ProgramFiles)));
-            AddReadWritePath(fam, option, AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)));
-            AddReadWritePath(fam, option, AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.CommonApplicationData)));
-            AddReadWritePath(fam, option, AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.InternetCache)));
-            AddReadWritePath(fam, option, AbsolutePath.Create(m_pathTable, SpecialFolderUtilities.GetFolderPath(Environment.SpecialFolder.History)));
-            AddReadWritePath(fam, option, AbsolutePath.Create(m_pathTable, Environment.GetEnvironmentVariable("TEMP")));
 
             // We allow access on all provided files/directories
             // Note: if C:\A is allowed, its subtree is allowed too.
