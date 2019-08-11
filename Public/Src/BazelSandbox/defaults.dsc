@@ -18,7 +18,6 @@ import * as BuildXLSdk from "Sdk.BuildXL";
 import {NetFx} from "Sdk.BuildXL";
 
 export {BuildXLSdk, NetFx};
-export declare const qualifier: BuildXLSdk.DefaultQualifier;
 
 namespace BazelSandbox {
     export declare const qualifier: BuildXLSdk.DefaultQualifier;
@@ -33,6 +32,51 @@ namespace BazelSandbox {
             importFrom("BuildXL.Utilities").Collections.dll,
             importFrom("BuildXL.Utilities").dll,
             importFrom("BuildXL.Utilities").Native.dll,
+        ],
+        runtimeContent: [
+            ...addIfLazy(qualifier.targetRuntime === "win-x64", () => [
+                importFrom("BuildXL.Sandbox.Windows").Deployment.detours,
+            ]),
+        ],
+    });
+}
+
+namespace BazelSandboxDll {
+    export declare const qualifier: BuildXLSdk.DefaultQualifier;
+    // export declare const qualifier: { configuration: qualifier.configuration, targetFramework: "netstandard2.0", targetRuntime: "win-x64" };
+    //interface FrameworkDependentCode extends Qualifier, BuildXLSdk.DefaultQualifierWithNet451AndNetStandard20
+    //{
+    //    targetFramework: "netstandard2.0";
+    // }
+    const FrameworkDependentCode = { configuration: qualifier.configuration, targetFramework: "netstandard2.0", targetRuntime: "win-x64" };
+    // export declare const qualifier: FrameworkDependentCode;
+
+    @@public
+    export const dll = BuildXLSdk.library({
+        assemblyName: "BazelSandbox2",
+        sources: globR(d`.`, "*.cs"),
+        
+        references: [
+            importFrom("BuildXL.Engine").Processes.dll,
+            importFrom("BuildXL.Pips").dll,
+            importFrom("BuildXL.Utilities").Collections.dll,
+            importFrom("BuildXL.Utilities").dll,
+            importFrom("BuildXL.Utilities").Native.dll,
+            /*importFrom("BuildXL.Engine")
+                .withQualifier(FrameworkDependentCode)
+                .Processes.dll,
+            importFrom("BuildXL.Pips")
+                .withQualifier(FrameworkDependentCode)
+                .dll,
+            importFrom("BuildXL.Utilities")
+                .withQualifier(FrameworkDependentCode)
+                .Collections.dll,
+            importFrom("BuildXL.Utilities")
+                .withQualifier(FrameworkDependentCode)
+                .dll,
+            importFrom("BuildXL.Utilities")
+                .withQualifier(FrameworkDependentCode)
+                .Native.dll,*/
         ],
         runtimeContent: [
             ...addIfLazy(qualifier.targetRuntime === "win-x64", () => [

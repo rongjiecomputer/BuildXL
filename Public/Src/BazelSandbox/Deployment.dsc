@@ -19,6 +19,8 @@ import * as Deployment from "Sdk.Deployment";
 import * as Managed from "Sdk.Managed";
 
 namespace Deployment {
+    export declare const qualifier: BuildXLSdk.DefaultQualifier;
+
     @@public
     export const deployment: Deployment.Definition = {
         contents: [
@@ -35,4 +37,5 @@ namespace Deployment {
         definition: deployment,
         targetLocation: r`BazelSandbox/${qualifier.configuration}/${frameworkSpecificPart}`,
     });
+
 }
