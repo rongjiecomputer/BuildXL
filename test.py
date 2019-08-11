@@ -12,6 +12,9 @@ ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 flags.DEFINE_string('test_bazelsandbox_dir',
                     os.path.join(ROOT_DIR, 'Out/Bin/BazelSandbox/release/win-x64'),
                     'Root directory where BazelSandbox lives')
+flags.DEFINE_string('git_dir',
+                    next(x for x in [r'C:\Git', r'C:\Program Files\Git', r'C:\Program Files(x86)\Git'] if os.path.exists(x)),
+                    'Root directory where "Git for Windows" lives')
 
 def RunCommand(command, **kwargs):
   # print('Running command:', command)
@@ -61,6 +64,13 @@ class BazelSandboxTest(absltest.TestCase):
     self.btxt = self.dir.create_file('b.txt', 'Dr. Jekyll and Mr. Hyde')
     self.ctxt = self.dir.create_file('c/c.txt')
 
+    self.workspace = self.create_tempdir()
+    self.dtxt = self.workspace.create_file('d.txt', 'Lord of the Rings')
+    self.etxt = self.workspace.create_file('e.txt', 'Hobbits')
+
+    self.junction = os.path.join(self.dir.full_path, 'junction')
+    exitcode, stdout, stderr = RunCommand(['mklink', '/J', self.junction, self.workspace.full_path], shell=True)
+
   def test_file_access(self):
     self._setup()
 
@@ -83,7 +93,7 @@ class BazelSandboxTest(absltest.TestCase):
       ['-W', self.dir.full_path])
     self.assertEqual(exitcode, 0)
     self.assertMultiLineEqual(stdout,
-      '{0}\\a.txt\n{0}\\b.txt\n{0}\\c\n{0}\\c\\c.txt\n'.format(self.dir.full_path))
+      '{0}\\a.txt\n{0}\\b.txt\n{0}\\c\n{0}\\junction\n{0}\\c\\c.txt\n{0}\\junction\\d.txt\n{0}\\junction\\e.txt\n'.format(self.dir.full_path))
 
     # We can make working dir to be readonly
     exitcode, stdout, stderr = RunCommandInSandbox(
@@ -121,6 +131,35 @@ class BazelSandboxTest(absltest.TestCase):
       'c.txt: can open for write',
     ])
 
+    # Ensure that permission is inherited for subprocess(es) as well
+    exitcode, stdout, stderr = RunCommandInSandbox(
+      [r'C:\Windows\System32\cmd.exe', '/c', os.path.join(ROOT_DIR, 'test.exe')],
+      ['-W', self.dir.full_path, '-w', self.dir.full_path, '-b', self.btxt.full_path])
+    self.assertEqual(exitcode, 0)
+
+    self.assertContainsSubsequence(stdout.split('\n'), [
+      'a.txt: Sherlock Holmes',
+      'b.txt: failed to open for read',
+      'c.txt: can open for write',
+    ])
+
+    # Junctions
+    exitcode, stdout, stderr = RunCommandInSandbox(
+      [r'C:\Windows\System32\cmd.exe', '/c', 'type', os.path.join(self.junction, 'd.txt')],
+      ['-W', self.dir.full_path, '-D'])
+    self.assertEqual(exitcode, 1)
+
+    # Msys/Cygwin based programs use NT APIs instead of Win32 APIs for file operation, make sure
+    # they are sandboxed too.
+    exitcode, stdout, stderr = RunCommandInSandbox(
+      [os.path.join(FLAGS.git_dir, 'usr', 'bin', 'cat.exe'), os.path.join(self.junction, 'd.txt').replace('\\', '/')],
+      ['-W', self.dir.full_path, '-D'])
+    self.assertEqual(exitcode, 1)
+
+    exitcode, stdout, stderr = RunCommandInSandbox(
+      [os.path.join(FLAGS.git_dir, 'bin', 'bash.exe'), '-c', "cat " + self.atxt.full_path.replace('\\', '/')],
+      ['-W', self.dir.full_path, '-D'])
+    self.assertEqual(exitcode, 1)
 
   def test_env(self):
     env = os.environ.copy()

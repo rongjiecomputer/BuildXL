@@ -216,6 +216,8 @@ namespace Bazel
                 ReportFileAccesses = false,
                 ReportUnexpectedFileAccesses = false,
                 MonitorChildProcesses = true,
+                MonitorNtCreateFile = true,
+                MonitorZwCreateOpenQueryFile = true,
             };
 
             // We make whole filesystem as read-only.
